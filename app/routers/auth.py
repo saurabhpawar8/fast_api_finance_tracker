@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from dotenv import load_dotenv
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
-from core.dependencies import db_dependecy
+from app.dependencies.dependencies import db_dependecy
 from typing import Annotated
 from datetime import datetime, timedelta
 from jose import jwt
@@ -16,7 +16,7 @@ from jose import jwt, JWTError
 from fastapi.responses import JSONResponse
 
 
-from core.schemas.schema import User
+from app.models.schema import User
 
 # from core.dependencies import SECRET_KEY, ALGORITHM, bcryptContext
 

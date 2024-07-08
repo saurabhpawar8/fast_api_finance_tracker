@@ -1,7 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from typing import Annotated
-from core.models.database import SessionLocal
+from app.db.database import SessionLocal
 from jose import jwt, JWTError
 import os
 from starlette import status

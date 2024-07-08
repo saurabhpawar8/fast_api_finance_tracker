@@ -1,7 +1,7 @@
 from fastapi import FastAPI
-from core.models.database import engine
-from core.schemas import schema
-from core.routers import account, auth, transactions, category
+from app.db.database import engine
+from app.models import schema
+from app.routers import account, auth, transactions, category
 
 app = FastAPI()
 

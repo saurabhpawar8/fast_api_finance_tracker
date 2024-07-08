@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Path
-from core.schemas.schema import Category
-from core.dependencies import db_dependecy, user_dependecy
+from app.models.schema import Category
+from app.dependencies.dependencies import db_dependecy, user_dependecy
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 

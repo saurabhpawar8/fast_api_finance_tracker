@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Path, Depends
-from core.schemas.schema import Account
-from core.dependencies import db_dependecy, user_dependecy
+from app.models.schema import Account
+from app.dependencies.dependencies import db_dependecy, user_dependecy
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
-from typing import Annotated
+from typing import Annotated, List
+from app.services.account_service import AccountService
 
 
 router = APIRouter()
@@ -17,12 +18,20 @@ class AccountRequest(BaseModel):
 
 @router.post("/create_account")
 async def createAccount(
-    user: user_dependecy, db: db_dependecy, accountRequest: AccountRequest
+    user: user_dependecy,
+    db: db_dependecy,
+    accountRequest: AccountRequest,
 ):
     print(user)
     if user is None:
         return JSONResponse({"error": "Authentication failed"})
-    if db.query(Account).filter(Account.user_id == user.get("user_id")).first():
+    if (
+        db.query(Account)
+        .filter(
+            Account.name == accountRequest.name, Account.user_id == user.get("user_id")
+        )
+        .first()
+    ):
         return JSONResponse({"message": "Account already exists"})
     acc = Account(**accountRequest.model_dump(), user_id=user.get("user_id"))
     db.add(acc)
@@ -33,7 +42,7 @@ async def createAccount(
 @router.get("/get_account/{id}")
 async def getAccount(user: user_dependecy, db: db_dependecy, id: int = Path(gt=0)):
     if user is None:
-        raise JSONResponse({"error": "Authentication failed"})
+        return JSONResponse({"error": "Authentication failed"})
     account = (
         db.query(Account)
         .filter(Account.id == id, Account.user_id == user.get("user_id"))
@@ -61,11 +70,21 @@ async def updateAccount(
     db.add(account)
     db.commit()
 
-    return JSONResponse(content={"message": "Account updated successfully"})
+    return JSONResponse({"message": "Account updated successfully"})
+
+
+# class AccountSchema(BaseModel):
+#     id: int
+#     balance: int
+#     # account_number: str
+
+#     class Config:
+#         orm_mode = True
 
 
 @router.get("/get_all_accounts")
 async def getAllAccounts(user: user_dependecy, db: db_dependecy):
     accounts = db.query(Account).filter(Account.user_id == user.get("user_id")).all()
     return accounts
+    # return JSONResponse({"data": accounts})
     # return JSONResponse(content={"data": accounts})
