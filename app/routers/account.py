@@ -4,7 +4,6 @@ from app.dependencies.dependencies import db_dependecy, user_dependecy
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 from typing import Annotated, List
-from app.services.account_service import AccountService
 
 
 router = APIRouter()

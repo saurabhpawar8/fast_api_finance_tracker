@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Path
+from fastapi import APIRouter, Path, File, UploadFile, HTTPException
 from app.models.schema import Transaction, Account
 from app.dependencies.dependencies import db_dependecy, user_dependecy
 from pydantic import BaseModel
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from datetime import datetime
 from sqlalchemy import func
-
+import io
+import pandas as pd
+import openpyxl
+import os
 
 router = APIRouter()
 
@@ -135,3 +138,142 @@ async def updateTransaction(
 
     db.commit()
     return JSONResponse(content={"message": "Transaction updated successfully"})
+
+
+@router.post("/extract_and_uplod_trasaction")
+async def extractAndUploadTrasaction(
+    db: db_dependecy, user: user_dependecy, file: UploadFile = File(...)
+):
+
+    transactions = []
+    try:
+        content = file.read()
+        df = pd.read_excel(io.BytesIO(content))
+    except:
+        raise HTTPException(status_code=400, detail=f"Error reading Excel file: {e}")
+    for i, row in df.iterrows():
+        transaction = {
+            "category": row[0],
+            "date": row[1].date(),
+            "transaction_type": row[2],
+            "amount": row[3],
+            "account_name": row[4],
+            "remarks": row[5],
+        }
+        transactions.append(transaction)
+
+    if any(
+        [
+            True
+            for each in transactions
+            for k, v in each.items()
+            if (k != "remarks" and v == "")
+        ]
+    ):
+        return JSONResponse({"error": "One of column is empty"})
+
+    for each in transactions:
+        account = (
+            db.query(Account)
+            .filter(
+                Account.name == each.get("account_name"),
+                Account.user_id == user.get("user_id"),
+            )
+            .first()
+        )
+        if each.get("transaction_type") == "Income":
+            account.balance += each.get("amount")
+        if each.get("transaction_type") == "Expense":
+            account.balance += each.get("amount")
+        trn = Transaction(
+            amount=each.get("amount"),
+            date=each.get("date"),
+            category=each.get("category"),
+            transaction_type=each.get("transaction_type"),
+            remarks=each.get("remarks"),
+            account_id=account.id,
+            user_id=user.get("user_id"),
+        )
+        db.add(trn)
+        db.commit()
+
+    return JSONResponse({"message": "Succefully added transactions"})
+
+
+@router.get("/download_sample_file")
+async def download_sample_file(user: user_dependecy):
+    if not user:
+        return JSONResponse({"message": "Not Authenticated"})
+    filePath = os.path.join("app/static", "transactions.xlsx")
+    if not os.path.exists(filePath):
+        return {"error": "File not found"}
+    return FileResponse(filePath)
+
+
+@router.post("/transaction_report")
+async def transactionReport(
+    db: db_dependecy, user: user_dependecy, allTransactionRequest: AllTransactionRequest
+):
+    trn = (
+        db.query(
+            Transaction.amount,
+            func.date_format(Transaction.date, "%Y-%m-%d").label("date"),
+            Transaction.category,
+            Transaction.transaction_type,
+            Transaction.remarks,
+            Account.name,
+        )
+        .join(Account, Transaction.account_id == Account.id)
+        .filter(Transaction.user_id == user.get("user_id"))
+    )
+
+    if allTransactionRequest.category != "ALL":
+        trn = trn.filter(Transaction.category == allTransactionRequest.category)
+
+    if allTransactionRequest.transaction_type != "ALL":
+        trn = trn.filter(
+            Transaction.transaction_type == allTransactionRequest.transaction_type
+        )
+
+    if allTransactionRequest.account != "ALL":
+        trn = trn.filter(Account.name == allTransactionRequest.account)
+
+    if allTransactionRequest.from_date and allTransactionRequest.to_date:
+        from_date_obj = datetime.strptime(allTransactionRequest.from_date, "%Y-%m-%d")
+        to_date_obj = datetime.strptime(allTransactionRequest.to_date, "%Y-%m-%d")
+        trn = trn.filter(Transaction.date.between(from_date_obj, to_date_obj))
+
+    transactions_list = [
+        {
+            "category": transaction.category,
+            "date": transaction.date,
+            "transaction_type": transaction.transaction_type,
+            "amount": transaction.amount,
+            "account": transaction.name,
+            "remarks": transaction.remarks,
+        }
+        for transaction in trn.all()
+    ]
+
+    df = pd.DataFrame(transactions_list)
+    df.columns = [
+        "Category",
+        "Transaction Date",
+        "Transaction Type",
+        "Amount",
+        "Account",
+        "Remarks",
+    ]
+    # print(df.columns)
+    excel_file = "transaction_report.xlsx"
+
+    df.to_excel(excel_file, index=False)
+
+    response = FileResponse(
+        excel_file,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=excel_file,
+    )
+    # os.remove(excel_file)
+
+    return response
