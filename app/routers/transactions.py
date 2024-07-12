@@ -9,6 +9,7 @@ import io
 import pandas as pd
 import os
 from decimal import Decimal
+from app.utils.utils_functions import extractTransactionData
 
 router = APIRouter()
 
@@ -150,7 +151,11 @@ async def getAllTransactions(
 
 @router.get("/get_transaction/{id}")
 async def getTransaction(user: user_dependecy, db: db_dependecy, id: int = Path(gt=0)):
-    trn = db.query(Transaction).filter(Transaction.user_id == 1).first()
+    trn = (
+        db.query(Transaction)
+        .filter(Transaction.user_id == 1, Transaction.id == id)
+        .first()
+    )
     return trn
 
 
@@ -192,23 +197,12 @@ async def updateTransaction(
 async def extractAndUploadTrasaction(
     db: db_dependecy, user: user_dependecy, file: UploadFile = File(...)
 ):
-
-    transactions = []
     try:
-        content = file.read()
+        content = file.file.read()
         df = pd.read_excel(io.BytesIO(content))
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error reading Excel file: {e}")
-    for _, row in df.iterrows():
-        transaction = {
-            "category": row[0],
-            "date": row[1].date(),
-            "transaction_type": row[2],
-            "amount": row[3],
-            "account_name": row[4],
-            "remarks": row[5],
-        }
-        transactions.append(transaction)
+    transactions = extractTransactionData(df)
 
     if any(
         [
@@ -312,7 +306,7 @@ async def transactionReport(
         "Account",
         "Remarks",
     ]
-    # print(df.columns)
+
     excel_file = "transaction_report.xlsx"
 
     df.to_excel(excel_file, index=False)

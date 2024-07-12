@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 
 
-
 router = APIRouter()
 
 
@@ -47,7 +46,7 @@ async def getAccount(user: user_dependecy, db: db_dependecy, id: int = Path(gt=0
         .filter(Account.id == id, Account.user_id == user.get("user_id"))
         .first()
     )
-    return account
+    return JSONResponse(account)
 
 
 @router.put("/update_account/{id}")
@@ -72,18 +71,7 @@ async def updateAccount(
     return JSONResponse({"message": "Account updated successfully"})
 
 
-# class AccountSchema(BaseModel):
-#     id: int
-#     balance: int
-#     # account_number: str
-
-#     class Config:
-#         orm_mode = True
-
-
 @router.get("/get_all_accounts")
 async def getAllAccounts(user: user_dependecy, db: db_dependecy):
     accounts = db.query(Account).filter(Account.user_id == user.get("user_id")).all()
     return accounts
-    # return JSONResponse({"data": accounts})
-    # return JSONResponse(content={"data": accounts})
