@@ -7,8 +7,8 @@ from datetime import datetime
 from sqlalchemy import func
 import io
 import pandas as pd
-import openpyxl
 import os
+from decimal import Decimal
 
 router = APIRouter()
 
@@ -59,6 +59,12 @@ async def createTransaction(
     return JSONResponse(content={"message": "Transaction created successfully"})
 
 
+def decimalToFloat(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    return value
+
+
 @router.post("/get_all_transactions")
 async def getAllTransactions(
     user: user_dependecy, db: db_dependecy, allTransactionRequest: AllTransactionRequest
@@ -78,9 +84,11 @@ async def getAllTransactions(
         .join(Account, Transaction.account_id == Account.id)
         .filter(Transaction.user_id == user.get("user_id"))
     )
+    earning = db.query(func.coalesce(func.sum(Transaction.amount), 0).label("earning"))
 
     if allTransactionRequest.category != "ALL":
         trn = trn.filter(Transaction.category == allTransactionRequest.category)
+        earning = earning.filter(Transaction.category == allTransactionRequest.category)
 
     if allTransactionRequest.transaction_type != "ALL":
         trn = trn.filter(
@@ -89,15 +97,55 @@ async def getAllTransactions(
 
     if allTransactionRequest.account != "ALL":
         trn = trn.filter(Account.name == allTransactionRequest.account)
+        earning = earning.filter(Account.name == allTransactionRequest.account)
 
     if allTransactionRequest.from_date and allTransactionRequest.to_date:
         from_date_obj = datetime.strptime(allTransactionRequest.from_date, "%Y-%m-%d")
         to_date_obj = datetime.strptime(allTransactionRequest.to_date, "%Y-%m-%d")
         trn = trn.filter(Transaction.date.between(from_date_obj, to_date_obj))
+        earning = earning.filter(Transaction.date.between(from_date_obj, to_date_obj))
 
-    t = trn.all()
-    print(t)
-    return t
+    if allTransactionRequest.transaction_type == "Income":
+        income = db.execute(
+            earning.filter(Transaction.transaction_type == "Income")
+        ).scalar()
+        db.execute(income).scalar()
+        expense = 0
+
+    elif allTransactionRequest.transaction_type == "Expense":
+        expense = earning.filter(Transaction.transaction_type == "Expense")
+        db.execute(income).scalar()
+        income = 0
+
+    else:
+        income = db.execute(
+            earning.filter(Transaction.transaction_type == "Income")
+        ).scalar()
+        expense = db.execute(
+            earning.filter(Transaction.transaction_type == "Expense")
+        ).scalar()
+
+    netEarnings = income - expense
+    transactions = [
+        {
+            "category": transaction.category,
+            "date": transaction.date,
+            "transaction_type": transaction.transaction_type,
+            "amount": transaction.amount,
+            "account": transaction.name,
+            "remarks": transaction.remarks,
+        }
+        for transaction in trn.all()
+    ]
+    print(netEarnings, income, expense)
+    return JSONResponse(
+        {
+            "transactions": transactions,
+            "net_earnings": decimalToFloat(netEarnings),
+            "total_income": decimalToFloat(income),
+            "total_expense": decimalToFloat(expense),
+        }
+    )
 
 
 @router.get("/get_transaction/{id}")
@@ -149,9 +197,9 @@ async def extractAndUploadTrasaction(
     try:
         content = file.read()
         df = pd.read_excel(io.BytesIO(content))
-    except:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error reading Excel file: {e}")
-    for i, row in df.iterrows():
+    for _, row in df.iterrows():
         transaction = {
             "category": row[0],
             "date": row[1].date(),

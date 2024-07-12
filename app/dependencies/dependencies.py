@@ -6,7 +6,6 @@ from jose import jwt, JWTError
 import os
 from starlette import status
 from dotenv import load_dotenv
-
 from fastapi import HTTPException
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer

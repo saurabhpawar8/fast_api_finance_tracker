@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
 from starlette import status
-from jose import jwt, JWTError
+from jose import jwt
 
 from fastapi.responses import JSONResponse
 
